@@ -1,6 +1,9 @@
+import json
 import os
 import re
 import pickle
+import tempfile
+import zipfile
 from contextlib import asynccontextmanager
 
 import numpy as np
@@ -9,12 +12,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
-
-
-# With these two lines:
 from keras.models import load_model
-from keras.layers import Embedding, Dense, GRU
 from keras.utils import pad_sequences
+
+
+from keras.layers import Embedding, Dense, GRU
+
 """
 1. Constants
 """
@@ -73,21 +76,29 @@ class HealthResponse(BaseModel):
 
 """
 4. Model Loading & Lifespan Management
-Loads BiLSTM model and tokenizer once on server startup.
+Strips newer Keras 3.15+ quantization_config keys so the model loads cleanly on any Keras 3 server.
 """
-class CompatEmbedding(Embedding):
-    def __init__(self, *args, quantization_config=None, **kwargs):
-        super().__init__(*args, **kwargs)
+def load_keras_compat(model_path: str):
+    def strip_quantization_config(obj):
+        if isinstance(obj, dict):
+            obj.pop("quantization_config", None)
+            for value in obj.values():
+                strip_quantization_config(value)
+        elif isinstance(obj, list):
+            for item in obj:
+                strip_quantization_config(item)
 
+    compat_path = os.path.join(tempfile.gettempdir(), f"compat_{os.path.basename(model_path)}")
+    with zipfile.ZipFile(model_path, "r") as zin, zipfile.ZipFile(compat_path, "w", zipfile.ZIP_DEFLATED) as zout:
+        for item in zin.infolist():
+            data = zin.read(item.filename)
+            if item.filename == "config.json":
+                cfg = json.loads(data.decode("utf-8"))
+                strip_quantization_config(cfg)
+                data = json.dumps(cfg).encode("utf-8")
+            zout.writestr(item, data)
 
-class CompatDense(Dense):
-    def __init__(self, *args, quantization_config=None, **kwargs):
-        super().__init__(*args, **kwargs)
-
-
-class CompatGRU(GRU):
-    def __init__(self, *args, quantization_config=None, **kwargs):
-        super().__init__(*args, **kwargs)
+    return load_model(compat_path)
 
 
 dl_model = {}
@@ -96,14 +107,7 @@ dl_model = {}
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("Loading GloVe-BiGRU model and tokenizer...")
-    dl_model["model"] = load_model(
-        MODEL_PATH,
-        custom_objects={
-            "Embedding": CompatEmbedding,
-            "Dense": CompatDense,
-            "GRU": CompatGRU,
-        },
-    )
+    dl_model["model"] = load_keras_compat(MODEL_PATH)
     with open(TOKENIZER_PATH, "rb") as file:
         dl_model["tokenizer"] = pickle.load(file)
     print("GloVe-BiGRU model and tokenizer loaded successfully. API ready!")
@@ -111,7 +115,7 @@ async def lifespan(app: FastAPI):
     yield
 
     dl_model.clear()
-    print("Server shutdown: Cleared model from memory.")
+    print("Server shutdown: Cleared model from memory.")s
 
 """
 5. FastAPI App, CORS & Static Files Setup
