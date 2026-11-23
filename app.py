@@ -1,4 +1,8 @@
 import os
+
+# Disable Gradio 6 Node SSR server so port 7860 stays free for Uvicorn
+os.environ["GRADIO_SSR_MODE"] = "false"
+
 import numpy as np
 import gradio as gr
 import uvicorn
@@ -7,11 +11,10 @@ from keras.utils import pad_sequences
 try:
     import spaces  # type: ignore
 
-    @spaces.GPU
-    def _zerogpu_stub():
-        return True
+    gpu_decorator = spaces.GPU
 except Exception:
-    pass
+    spaces = None
+    gpu_decorator = lambda fn: fn
 
 from main import (
     app,
@@ -23,6 +26,7 @@ from main import (
 )
 
 
+@gpu_decorator
 def gradio_predict(text: str):
     if not text or not text.strip():
         return "Please enter a sentence.", {}
@@ -58,5 +62,10 @@ demo = gr.Interface(
 app = gr.mount_gradio_app(app, demo, path="/gradio")
 
 if __name__ == "__main__":
-    port = int(os.environ.get("GRADIO_SERVER_PORT", os.environ.get("PORT", 7860)))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    # Register @spaces.GPU with ZeroGPU broker when serving via Uvicorn
+    if spaces is not None:
+        _zero = getattr(spaces, "zero", None)
+        if _zero is not None and hasattr(_zero, "startup"):
+            _zero.startup()
+
+    uvicorn.run(app, host="0.0.0.0", port=7860)
