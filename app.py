@@ -3,6 +3,15 @@ import gradio as gr
 import uvicorn
 from keras.utils import pad_sequences
 
+try:
+    import spaces # type: ignore
+
+    @spaces.GPU
+    def _zerogpu_stub():
+        return True
+except Exception:
+    pass
+
 from main import (
     app,
     dl_model,
