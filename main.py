@@ -115,7 +115,7 @@ async def lifespan(app: FastAPI):
     yield
 
     dl_model.clear()
-    print("Server shutdown: Cleared model from memory.")s
+    print("Server shutdown: Cleared model from memory.")
 
 """
 5. FastAPI App, CORS & Static Files Setup
