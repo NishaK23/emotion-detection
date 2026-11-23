@@ -13,8 +13,8 @@ from pydantic import BaseModel, Field
 
 # With these two lines:
 from keras.models import load_model
+from keras.layers import Embedding, Dense, GRU
 from keras.utils import pad_sequences
-
 """
 1. Constants
 """
@@ -75,15 +75,38 @@ class HealthResponse(BaseModel):
 4. Model Loading & Lifespan Management
 Loads BiLSTM model and tokenizer once on server startup.
 """
+class CompatEmbedding(Embedding):
+    def __init__(self, *args, quantization_config=None, **kwargs):
+        super().__init__(*args, **kwargs)
+
+
+class CompatDense(Dense):
+    def __init__(self, *args, quantization_config=None, **kwargs):
+        super().__init__(*args, **kwargs)
+
+
+class CompatGRU(GRU):
+    def __init__(self, *args, quantization_config=None, **kwargs):
+        super().__init__(*args, **kwargs)
+
+
 dl_model = {}
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print("Loading BiLSTM model and tokenizer...")
-    dl_model["model"] = load_model(MODEL_PATH)
+    print("Loading GloVe-BiGRU model and tokenizer...")
+    dl_model["model"] = load_model(
+        MODEL_PATH,
+        custom_objects={
+            "Embedding": CompatEmbedding,
+            "Dense": CompatDense,
+            "GRU": CompatGRU,
+        },
+    )
     with open(TOKENIZER_PATH, "rb") as file:
         dl_model["tokenizer"] = pickle.load(file)
-    print("Model and tokenizer loaded successfully. API ready!")
+    print("GloVe-BiGRU model and tokenizer loaded successfully. API ready!")
 
     yield
 
