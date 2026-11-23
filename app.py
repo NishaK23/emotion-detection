@@ -1,10 +1,11 @@
+import os
 import numpy as np
 import gradio as gr
 import uvicorn
 from keras.utils import pad_sequences
 
 try:
-    import spaces # type: ignore
+    import spaces  # type: ignore
 
     @spaces.GPU
     def _zerogpu_stub():
@@ -57,4 +58,5 @@ demo = gr.Interface(
 app = gr.mount_gradio_app(app, demo, path="/gradio")
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=7860)
+    port = int(os.environ.get("GRADIO_SERVER_PORT", os.environ.get("PORT", 7860)))
+    uvicorn.run(app, host="0.0.0.0", port=port)
