@@ -1,0 +1,23 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Secrets & environment variables (protects API/Hugging Face tokens)
+.env
+*.env
+
+# Jupyter / Colab notebook checkpoints
+.ipynb_checkpoints/
+
+# VS Code & OS-generated clutter
+.vscode/
+.DS_Store
+Thumbs.db
+*.log
